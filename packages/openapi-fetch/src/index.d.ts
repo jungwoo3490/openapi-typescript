@@ -17,6 +17,8 @@ export interface ClientOptions extends Omit<RequestInit, "headers"> {
   baseUrl?: string;
   /** custom fetch (defaults to globalThis.fetch) */
   fetch?: (input: Request) => Promise<Response>;
+  /** custom Request (defaults to globalThis.Request) */
+  Request?: typeof Request;
   /** global querySerializer */
   querySerializer?: QuerySerializer<unknown> | QuerySerializerOptions;
   /** global bodySerializer */
@@ -96,7 +98,7 @@ export type RequestBodyOption<T> = OperationRequestBodyContent<T> extends never
 
 export type FetchOptions<T> = RequestOptions<T> & Omit<RequestInit, "body" | "headers">;
 
-export type FetchResponse<T, Options, Media extends MediaType> =
+export type FetchResponse<T extends Record<string | number, any>, Options, Media extends MediaType> =
   | {
       data: ParseAsResponse<SuccessResponse<ResponseObjectMap<T>, Media>, Options>;
       error?: never;
@@ -144,12 +146,22 @@ export interface MiddlewareCallbackParams {
   readonly options: MergedOptions;
 }
 
-export interface Middleware {
-  onRequest?: (options: MiddlewareCallbackParams) => void | Request | undefined | Promise<Request | undefined | void>;
-  onResponse?: (
-    options: MiddlewareCallbackParams & { response: Response },
-  ) => void | Response | undefined | Promise<Response | undefined | void>;
-}
+type MiddlewareOnRequest = (
+  options: MiddlewareCallbackParams,
+) => void | Request | undefined | Promise<Request | undefined | void>;
+type MiddlewareOnResponse = (
+  options: MiddlewareCallbackParams & { response: Response },
+) => void | Response | undefined | Promise<Response | undefined | void>;
+
+export type Middleware =
+  | {
+      onRequest: MiddlewareOnRequest;
+      onResponse?: MiddlewareOnResponse;
+    }
+  | {
+      onRequest?: MiddlewareOnRequest;
+      onResponse: MiddlewareOnResponse;
+    };
 
 /** This type helper makes the 2nd function param required if params/requestBody are required; otherwise, optional */
 export type MaybeOptionalInit<Params, Location extends keyof Params> = RequiredKeysOf<
@@ -175,7 +187,7 @@ export type ClientMethod<
   ...init: InitParam<Init>
 ) => Promise<FetchResponse<Paths[Path][Method], Init, Media>>;
 
-export type ClientForPath<PathInfo, Media extends MediaType> = {
+export type ClientForPath<PathInfo extends Record<string | number, any>, Media extends MediaType> = {
   [Method in keyof PathInfo as Uppercase<string & Method>]: <Init extends MaybeOptionalInit<PathInfo, Method>>(
     ...init: InitParam<Init>
   ) => Promise<FetchResponse<PathInfo[Method], Init, Media>>;
@@ -222,7 +234,7 @@ export default function createClient<Paths extends {}, Media extends MediaType =
   clientOptions?: ClientOptions,
 ): Client<Paths, Media>;
 
-export type PathBasedClient<Paths, Media extends MediaType = MediaType> = {
+export type PathBasedClient<Paths extends Record<string | number, any>, Media extends MediaType = MediaType> = {
   [Path in keyof Paths]: ClientForPath<Paths[Path], Media>;
 };
 

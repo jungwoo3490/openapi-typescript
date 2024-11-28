@@ -1,23 +1,5 @@
 // settings & const
-const DEFAULT_HEADERS = {
-  "Content-Type": "application/json",
-};
-
 const PATH_PARAM_RE = /\{[^{}]+\}/g;
-
-/** Add custom parameters to Request object */
-class CustomRequest extends Request {
-  constructor(input, init) {
-    super(input, init);
-
-    // add custom parameters
-    for (const key in init) {
-      if (!(key in this)) {
-        this[key] = init[key];
-      }
-    }
-  }
-}
 
 /**
  * Returns a cheap, non-cryptographically-secure random ID
@@ -34,6 +16,7 @@ export function randomID() {
 export default function createClient(clientOptions) {
   let {
     baseUrl = "",
+    Request: CustomRequest = globalThis.Request,
     fetch: baseFetch = globalThis.fetch,
     querySerializer: globalQuerySerializer,
     bodySerializer: globalBodySerializer,
@@ -41,7 +24,6 @@ export default function createClient(clientOptions) {
     ...baseOptions
   } = { ...clientOptions };
   baseUrl = removeTrailingSlash(baseUrl);
-  baseHeaders = mergeHeaders(DEFAULT_HEADERS, baseHeaders);
   const middlewares = [];
 
   /**
@@ -53,11 +35,13 @@ export default function createClient(clientOptions) {
     const {
       baseUrl: localBaseUrl,
       fetch = baseFetch,
+      Request = CustomRequest,
       headers,
       params = {},
       parseAs = "json",
       querySerializer: requestQuerySerializer,
       bodySerializer = globalBodySerializer ?? defaultBodySerializer,
+      body,
       ...init
     } = fetchOptions || {};
     if (localBaseUrl) {
@@ -78,23 +62,36 @@ export default function createClient(clientOptions) {
             });
     }
 
+    const serializedBody = body === undefined ? undefined : bodySerializer(body);
+
+    const defaultHeaders =
+      // with no body, we should not to set Content-Type
+      serializedBody === undefined ||
+      // if serialized body is FormData; browser will correctly set Content-Type & boundary expression
+      serializedBody instanceof FormData
+        ? {}
+        : {
+            "Content-Type": "application/json",
+          };
+
     const requestInit = {
       redirect: "follow",
       ...baseOptions,
       ...init,
-      headers: mergeHeaders(baseHeaders, headers, params.header),
+      body: serializedBody,
+      headers: mergeHeaders(defaultHeaders, baseHeaders, headers, params.header),
     };
-    if (requestInit.body) {
-      requestInit.body = bodySerializer(requestInit.body);
-      // remove `Content-Type` if serialized body is FormData; browser will correctly set Content-Type & boundary expression
-      if (requestInit.body instanceof FormData) {
-        requestInit.headers.delete("Content-Type");
-      }
-    }
 
     let id;
     let options;
     let request = new CustomRequest(createFinalURL(schemaPath, { baseUrl, params, querySerializer }), requestInit);
+
+    /** Add custom parameters to Request object */
+    for (const key in init) {
+      if (!(key in request)) {
+        request[key] = init[key];
+      }
+    }
 
     if (middlewares.length) {
       id = randomID();
@@ -117,7 +114,7 @@ export default function createClient(clientOptions) {
             id,
           });
           if (result) {
-            if (!(result instanceof Request)) {
+            if (!(result instanceof CustomRequest)) {
               throw new Error("onRequest: must return new Request() when modifying the request");
             }
             request = result;
@@ -154,9 +151,8 @@ export default function createClient(clientOptions) {
     }
 
     // handle empty content
-    // note: we return `{}` because we want user truthy checks for `.data` or `.error` to succeed
     if (response.status === 204 || response.headers.get("Content-Length") === "0") {
-      return response.ok ? { data: {}, response } : { error: {}, response };
+      return response.ok ? { data: undefined, response } : { error: undefined, response };
     }
 
     // parse response (falling back to .text() when necessary)
@@ -439,6 +435,9 @@ export function createQuerySerializer(options) {
           continue;
         }
         if (Array.isArray(value)) {
+          if (value.length === 0) {
+            continue;
+          }
           search.push(
             serializeArrayParam(name, value, {
               style: "form",

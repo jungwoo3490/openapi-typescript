@@ -657,6 +657,10 @@ export interface OpenAPITSOptions {
   pathParamsAsTypes?: boolean;
   /** Treat all objects as if they have \`required\` set to all properties by default (default: false) */
   propertiesRequiredByDefault?: boolean;
+  /** (optional) Generate schema types at root level */
+  rootTypes?: boolean;
+  /** (optional) Do not add Schema prefix to types at root level */
+  rootTypesNoSchemaPrefix?: boolean;
   /**
    * Configure Redocly for validation, schema fetching, and bundling
    * @see https://redocly.com/docs/cli/configuration/
@@ -688,6 +692,8 @@ export interface GlobalContext {
   pathParamsAsTypes: boolean;
   postTransform: OpenAPITSOptions["postTransform"];
   propertiesRequiredByDefault: boolean;
+  rootTypes: boolean;
+  rootTypesNoSchemaPrefix: boolean;
   redoc: RedoclyConfig;
   silent: boolean;
   transform: OpenAPITSOptions["transform"];
